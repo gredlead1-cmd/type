@@ -1,0 +1,789 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PromptType</title>
+  <style>
+    :root{
+      --bg:#000000;
+      --main:#fcedda;
+      --sub:#aa947d;
+      --caret:#99ffe4;
+      --error:#ff8080;
+      --error2:#b25959;
+    }
+
+    *{ box-sizing:border-box; }
+
+    body{
+      margin:0;
+      min-height:100vh;
+      background: var(--bg);
+      color: var(--main);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      overflow-x:hidden;
+    }
+
+    /* cozy vignette */
+    body::before{
+      content:"";
+      position:fixed;
+      inset:0;
+      pointer-events:none;
+      background:
+        radial-gradient(900px 500px at 50% 45%, rgba(170,148,125,.10), transparent 60%),
+        radial-gradient(700px 420px at 50% 60%, rgba(153,255,228,.06), transparent 62%),
+        radial-gradient(1200px 900px at 50% 50%, rgba(255,255,255,.03), transparent 70%);
+      opacity: 1;
+    }
+
+    /* top bar */
+    .top{
+      position:fixed;
+      top:48px;                 /* moved down */
+      left:0;
+      right:0;
+      display:flex;
+      justify-content:center;
+      z-index:10;
+    }
+
+    .top .bar{
+      width: min(1100px, 92vw); /* wider bar like your pink sketch */
+      display:flex;
+      justify-content:center;   /* centers pills inside the wide bar */
+      align-items:center;
+      gap:10px;
+      padding:12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(252,237,218,.12);
+      background: rgba(0,0,0,.55);
+      backdrop-filter: blur(10px);
+    }
+
+    .pill{
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(252,237,218,.14);
+      color: rgba(252,237,218,.88);
+      font-size: 13px;
+      line-height: 1;
+      user-select:none;
+    }
+
+    .btn{
+      background: transparent;
+      border: 1px solid rgba(252,237,218,.18);
+      color: rgba(252,237,218,.85);
+      padding: 6px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      line-height: 1;
+      transition: transform .08s ease, border-color .15s ease, background .15s ease;
+    }
+    .btn:hover{
+      border-color: rgba(252,237,218,.32);
+      background: rgba(252,237,218,.06);
+    }
+    .btn:active{ transform: translateY(1px); }
+
+    /* center stage */
+    .stage{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 150px 22px 90px;  /* more top + bottom space */
+    }
+
+    .wrap{
+      width: min(1320px, 96vw);  /* overall area wider */
+    }
+
+    /* small label */
+    .lang{
+      text-align:center;
+      color: rgba(170,148,125,.85);
+      font-size: 13px;
+      letter-spacing: .06em;
+      text-transform: lowercase;
+
+      margin-bottom: 8px;   /* was bigger; this pulls it UP closer to the prompt */
+      margin-top: -6px;     /* slight lift */
+    }
+
+    /* prompt text block */
+    .text{
+      font-size: 38px;
+      line-height: 1.35;
+      letter-spacing: 0.2px;
+      user-select:none;
+      white-space: pre-wrap;
+      word-break: break-word;
+
+      width: min(1180px, 96vw);  /* wider prompt area */
+      margin: 0 auto 26px;
+      padding: 16px 18px;
+      border-radius: 18px;
+
+      /* replace the blue gradient with a neutral dark glass */
+      background: rgba(0,0,0,.55);
+      box-shadow: 0 0 0 1px rgba(252,237,218,.08) inset;
+
+      position: relative; /* important so caretAbs can position inside */
+      transition: box-shadow 0.3s ease;
+    }
+
+    /* Visual cue when finished */
+    .text.finished {
+      box-shadow: 0 0 0 2px rgba(153, 255, 228, 0.4) inset;
+    }
+
+    .ok{ color: rgba(252,237,218,.96); }
+    .bad{
+      color: var(--error);
+      text-decoration: underline;
+      text-decoration-color: var(--error2);
+      text-underline-offset: 3px;
+    }
+    .todo{ color: rgba(252,237,218,.48); } /* readable, not ghosted */
+
+    /* smooth absolute caret */
+    .caretAbs{
+      position: absolute;
+      top: 0; 
+      left: 0;
+      width: 2px;
+      height: 1.05em;
+      background: var(--caret);
+      border-radius: 2px;
+
+      /* smooth motion */
+      transition: transform 80ms linear;
+
+      /* blinking */
+      animation: blink 1s steps(2,end) infinite;
+      pointer-events: none;
+    }
+    @keyframes blink { 50% { opacity:0; } }
+
+    /* footer row: stats + shortcuts grouped */
+    .stats{
+      margin-top: 34px;     /* push down */
+      display:flex;
+      gap: 16px;
+      justify-content:center;
+      align-items:center;
+      flex-wrap:wrap;
+      color: rgba(252,237,218,.62);
+      font-size: 13px;
+      transition: color 0.3s ease;
+    }
+    .stats.finished {
+        color: var(--caret); /* Highlight stats when done */
+    }
+
+    .sep{
+      width:1px;
+      height:14px;
+      background: rgba(252,237,218,.18);
+      display:inline-block;
+    }
+
+    .hint{
+      margin-top: 18px;     /* also push down */
+      display:flex;
+      gap: 12px;
+      align-items:center;
+      justify-content:center;
+      flex-wrap:wrap;
+      color: rgba(252,237,218,.40);
+      font-size: 12px;
+    }
+
+    kbd{
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(252,237,218,.16);
+      background: rgba(0,0,0,.55);
+      color: rgba(252,237,218,.85);
+      font-size: 12px;
+    }
+
+    /* hidden input */
+    .hiddenInput{
+      position: fixed;
+      left:-9999px;
+      top:auto;
+      width:1px;
+      height:1px;
+      opacity:0;
+    }
+
+    /* RECENT HISTORY (Bottom Corner) */
+    .recent-box {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 220px;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(252,237,218,.15);
+      border-radius: 14px;
+      padding: 14px;
+      font-size: 12px;
+      color: var(--sub);
+      z-index: 50;
+      transition: opacity 0.3s;
+    }
+    .recent-box:empty {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .recent-header {
+      font-weight: bold;
+      color: var(--barText);
+      margin-bottom: 8px;
+      border-bottom: 1px solid rgba(252,237,218,.15);
+      padding-bottom: 6px;
+      text-transform: uppercase;
+      font-size: 11px;
+      letter-spacing: 0.05em;
+    }
+    .recent-item {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      opacity: 0.8;
+      font-variant-numeric: tabular-nums;
+    }
+    .recent-item span.highlight {
+      color: var(--caret);
+    }
+
+    /* MODAL (Full History) */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.8);
+      z-index: 100;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      backdrop-filter: blur(4px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-content {
+      background: #110d0c;
+      border: 1px solid rgba(170,148,125,.25);
+      width: min(600px, 90vw);
+      height: min(500px, 80vh);
+      border-radius: 18px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.7);
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(252,237,218,.1);
+    }
+    .modal-title {
+      font-size: 18px;
+      color: var(--main);
+      font-weight: bold;
+    }
+    .close-btn {
+      background: none;
+      border: none;
+      color: var(--sub);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 4px;
+    }
+    .close-btn:hover { color: var(--main); }
+    
+    .history-list {
+      overflow-y: auto;
+      flex: 1;
+      margin-bottom: 20px;
+      font-size: 13px;
+    }
+    .history-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      padding: 10px 8px;
+      border-bottom: 1px solid rgba(252,237,218,.05);
+      color: rgba(252,237,218,.7);
+    }
+    .history-row:nth-child(even) { background: rgba(255,255,255,0.02); }
+    .history-row.head {
+      font-weight: bold;
+      color: var(--sub);
+      text-transform: uppercase;
+      font-size: 11px;
+      border-bottom: 1px solid rgba(252,237,218,.2);
+      background: transparent;
+      position: sticky;
+      top: 0;
+      background: #110d0c;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+    }
+    .btn-danger {
+      border-color: var(--error2);
+      color: var(--error);
+      opacity: 0.7;
+    }
+    .btn-danger:hover {
+      background: rgba(255,100,100,0.1);
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="top">
+    <div class="bar">
+      <span class="pill">PromptType</span>
+      <span class="pill" id="modeLabel">random prompts</span>
+      <button class="btn" id="nextBtn">next</button>
+      <button class="btn" id="resetBtn">reset</button>
+      <button class="btn" id="historyBtn">history</button>
+    </div>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="wrap">
+      <div class="lang">english</div>
+      <div class="text" id="text"></div>
+
+      <div class="stats" id="statsBar">
+        <div>time: <span id="time">0.0</span>s</div>
+        <div>wpm: <span id="wpm">0</span></div>
+        <div>accuracy: <span id="acc">100</span>%</div>
+        <div>errors: <span id="err">0</span></div>
+      </div>
+
+      <div class="hint">
+        <kbd>enter</kbd> next prompt &nbsp; <kbd>esc</kbd> reset typing
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent History Corner -->
+  <div id="recentHistory" class="recent-box"></div>
+
+  <!-- Full History Modal -->
+  <div id="historyModal" class="modal-overlay">
+    <div class="modal-content">
+      <div class="modal-header">
+        <span class="modal-title">Typing History</span>
+        <button class="close-btn" id="closeModal">&times;</button>
+      </div>
+      <div class="history-list">
+        <div class="history-row head">
+          <div>WPM</div>
+          <div>ACC</div>
+          <div>TIME</div>
+          <div>ERR</div>
+        </div>
+        <div id="fullHistoryList">
+          <!-- Rows go here -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger" id="clearHistoryBtn">Reset History</button>
+      </div>
+    </div>
+  </div>
+
+  <input class="hiddenInput" id="input" autocomplete="off" autocapitalize="off" spellcheck="false" />
+
+  <script>
+    const prompts = [
+      "Generate a cinematic cyberpunk street scene at night with neon signs, rain-soaked pavement, volumetric fog, and dramatic rim lighting, viewed from a low-angle camera.",
+      "Create a realistic medieval knight portrait wearing worn steel armor, shallow depth of field, soft natural lighting, and visible surface scratches and dents.",
+      "Generate a stylized fantasy village at sunrise with warm lighting, hand-painted textures, exaggerated proportions, and soft atmospheric perspective.",
+      "Create a futuristic female android character with exposed mechanical parts, realistic skin shader, glowing eyes, and a neutral studio background.",
+      "Generate a post-apocalyptic cityscape overgrown with vegetation, broken buildings, muted color palette, and cloudy sky lighting.",
+      "Create a realistic close-up of a human eye showing skin pores, eyelashes, subsurface scattering, and soft studio light reflections.",
+      "Generate a sci-fi spaceship interior corridor with clean panels, emissive strip lights, symmetrical composition, and depth cues.",
+      "Create a dark fantasy demon creature with cracked skin, glowing lava veins, sharp horns, and dramatic high-contrast lighting.",
+      "Generate a cozy indoor room scene with warm lighting, wooden furniture, soft shadows, and subtle dust particles in the air.",
+      "Generate a realistic product-style render of a smartwatch with clean reflections, studio lighting, and white background.",
+      "Generate a cyberpunk character wearing a hood, neon reflections on face, rain effects, and shallow depth of field.",
+      "Create a realistic desert ruin scene with weathered stone, sand buildup, harsh sunlight, and blue sky.",
+      "Generate a fantasy dragon flying over mountains, cinematic scale, motion blur, and epic cloud lighting.",
+      "Create a stylized anime character portrait with clean line art, soft shading, and pastel background.",
+      "Generate a futuristic laboratory environment with white surfaces, holographic interfaces, and cool lighting tones.",
+      "Explain how you would approach modeling a game-ready prop from reference to final export, using simple and practical steps.",
+      "Describe the difference between realism and stylization in 3D art, using clear examples and beginner-friendly language.",
+      "Explain how lighting changes the mood of a 3D scene and why it matters more than textures sometimes.",
+      "Walk through a typical character sculpting workflow starting from a basic sphere.",
+      "Explain what makes topology \"good\" and why clean edge flow is important for animation.",
+      "Describe how you would create believable wear and tear on a hard-surface object.",
+      "Explain the purpose of normal maps in simple terms, assuming the reader is new to 3D.",
+      "Describe how reference images should be gathered and used effectively during modeling.",
+      "Explain why scale consistency is important in 3D scenes and how artists maintain it.",
+      "Describe how lighting, materials, and composition work together in a final render."
+    ];
+
+    const textEl = document.getElementById("text");
+    const inputEl = document.getElementById("input");
+    const stage = document.getElementById("stage");
+    const statsBar = document.getElementById("statsBar");
+    
+    // Create the caret dynamically so it isn't hardcoded in HTML
+    const caretAbs = document.createElement("span");
+    caretAbs.className = "caretAbs";
+
+    const timeEl = document.getElementById("time");
+    const wpmEl = document.getElementById("wpm");
+    const accEl = document.getElementById("acc");
+    const errEl = document.getElementById("err");
+
+    const nextBtn = document.getElementById("nextBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const historyBtn = document.getElementById("historyBtn");
+    const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+    
+    // History UI elements
+    const recentHistoryEl = document.getElementById("recentHistory");
+    const historyModal = document.getElementById("historyModal");
+    const closeModal = document.getElementById("closeModal");
+    const fullHistoryList = document.getElementById("fullHistoryList");
+
+    let target = "";
+    let startTime = null;
+    let timer = null;
+    let lastIndex = -1;
+    let isFinished = false;
+    
+    // Load history from local storage
+    let historyData = JSON.parse(localStorage.getItem("promptType_history") || "[]");
+
+    function pickRandomPrompt() {
+      if (prompts.length === 1) return prompts[0];
+      let idx;
+      do { idx = Math.floor(Math.random() * prompts.length); }
+      while (idx === lastIndex);
+      lastIndex = idx;
+      return prompts[idx];
+    }
+    
+    // Stop the timer cleanly
+    function stopTimer() {
+        if (timer) {
+            clearInterval(timer);
+            timer = null;
+        }
+    }
+
+    // Full reset of state (for new prompt or restart)
+    function resetState() {
+        stopTimer();
+        startTime = null;
+        isFinished = false;
+        textEl.classList.remove("finished");
+        statsBar.classList.remove("finished");
+        caretAbs.style.display = "block"; // show caret
+    }
+
+    function saveToHistory(wpm, acc, time, err) {
+        const record = {
+            wpm: wpm,
+            acc: acc,
+            time: time,
+            err: err,
+            date: new Date().toISOString()
+        };
+        historyData.unshift(record); // Add to beginning
+        localStorage.setItem("promptType_history", JSON.stringify(historyData));
+        renderHistoryUI();
+    }
+    
+    function resetHistory() {
+        if(confirm("Are you sure you want to clear all history?")) {
+            historyData = [];
+            localStorage.removeItem("promptType_history");
+            renderHistoryUI();
+        }
+    }
+
+    function renderHistoryUI() {
+        // 1. Render Recent Box (Last 5)
+        if (historyData.length === 0) {
+            recentHistoryEl.innerHTML = "";
+            recentHistoryEl.style.display = "none";
+        } else {
+            recentHistoryEl.style.display = "block";
+            const recent = historyData.slice(0, 5);
+            let html = `<div class="recent-header">Last 5 Runs</div>`;
+            recent.forEach(r => {
+                html += `
+                <div class="recent-item">
+                    <span class="highlight">${r.wpm} wpm</span>
+                    <span>${r.acc}%</span>
+                    <span>${r.err} err</span>
+                </div>`;
+            });
+            recentHistoryEl.innerHTML = html;
+        }
+
+        // 2. Render Modal List
+        if (historyData.length === 0) {
+            fullHistoryList.innerHTML = `<div style="padding:20px; text-align:center; color:rgba(252,237,218,0.4);">No history yet</div>`;
+        } else {
+            let html = "";
+            historyData.forEach(r => {
+                html += `
+                <div class="history-row">
+                    <span style="color:var(--caret)">${r.wpm}</span>
+                    <span>${r.acc}%</span>
+                    <span>${r.time}s</span>
+                    <span>${r.err}</span>
+                </div>`;
+            });
+            fullHistoryList.innerHTML = html;
+        }
+    }
+
+    function render() {
+      // Clean up invisible characters immediately
+      const typed = inputEl.value.replace(/[\u200B-\u200D\uFEFF]/g, "");
+      if (typed !== inputEl.value) {
+        inputEl.value = typed;
+      }
+      
+      let ok = 0, bad = 0;
+      let out = "";
+
+      for (let i = 0; i < target.length; i++) {
+        const ch = target[i];
+        const t = typed[i];
+
+        if (t == null) {
+          out += `<span class="todo">${escapeHtml(ch)}</span>`;
+        } else if (t === ch) {
+          ok++;
+          out += `<span class="ok">${escapeHtml(ch)}</span>`;
+        } else {
+          bad++;
+          out += `<span class="bad">${escapeHtml(ch)}</span>`;
+        }
+      }
+
+      textEl.innerHTML = out;
+      // Re-append the absolute caret so it isn't lost
+      textEl.appendChild(caretAbs);
+
+      errEl.textContent = bad;
+
+      if (typed.length === 0) {
+        accEl.textContent = "100";
+      } else {
+        const accuracy = Math.max(0, Math.round((ok / typed.length) * 100));
+        accEl.textContent = accuracy;
+      }
+
+      const elapsed = startTime ? ((performance.now() - startTime) / 1000) : 0;
+      timeEl.textContent = elapsed.toFixed(1);
+
+      const wpm = elapsed > 0 ? Math.round(((typed.length / 5) / elapsed) * 60) : 0;
+      wpmEl.textContent = isFinite(wpm) ? wpm : 0;
+      
+      // Update caret position AFTER layout is updated
+      requestAnimationFrame(positionCaretAbs);
+      
+      // Check for completion
+      if (!isFinished && typed.length >= target.length) {
+          isFinished = true;
+          stopTimer();
+          textEl.classList.add("finished");
+          statsBar.classList.add("finished");
+          caretAbs.style.display = "none"; // hide caret when done
+          
+          // SAVE RESULT
+          saveToHistory(
+              wpmEl.textContent,
+              accEl.textContent,
+              timeEl.textContent,
+              errEl.textContent
+          );
+      }
+    }
+
+    function positionCaretAbs() {
+      if (isFinished) return; // don't position if finished
+
+      const spans = textEl.querySelectorAll("span.ok, span.bad, span.todo");
+      if (!spans.length) return;
+
+      const typedLen = inputEl.value.length;
+      const index = Math.min(typedLen, spans.length); // caret index (0..len)
+
+      let x = 0, y = 0;
+
+      if (index === 0) {
+        // before first char - stick to its left edge
+        const first = spans[0];
+        x = first.offsetLeft;
+        y = first.offsetTop;
+      } else {
+        // after previous char - stick to its right edge
+        const prev = spans[index - 1];
+        x = prev.offsetLeft + prev.offsetWidth;
+        y = prev.offsetTop;
+      }
+
+      caretAbs.style.transform = `translate(${x}px, ${y}px)`;
+    }
+
+    function escapeHtml(s) {
+      return s.replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+    }
+
+    function startRound() {
+      target = pickRandomPrompt();
+      inputEl.value = "";
+      resetState();
+      
+      // Reset displays
+      timeEl.textContent = "0.0";
+      wpmEl.textContent = "0";
+      accEl.textContent = "100";
+      errEl.textContent = "0";
+      
+      render();
+      requestAnimationFrame(positionCaretAbs);
+      inputEl.focus();
+    }
+
+    // focus when user clicks anywhere
+    stage.addEventListener("click", () => {
+        if (!isFinished) inputEl.focus();
+    });
+
+    inputEl.addEventListener("input", () => {
+      // If finished, prevent further changes or just don't run timer logic
+      if (isFinished) {
+          // Keep input clamped to target length so they can't type more
+          if (inputEl.value.length > target.length) {
+              inputEl.value = inputEl.value.slice(0, target.length);
+          }
+          return;
+      }
+
+      if (startTime === null) {
+        startTime = performance.now();
+        timer = setInterval(render, 100);
+      }
+      render();
+    });
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        startRound();
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        inputEl.value = "";
+        resetState(); // Ensures timer stops on restart/escape
+        render();
+        inputEl.focus();
+      }
+
+      // Fix for Ctrl+Backspace (Delete Word)
+      if (e.key === "Backspace" && e.ctrlKey) {
+          e.preventDefault(); // Prevent default browser behavior
+          
+          const val = inputEl.value;
+          const start = inputEl.selectionStart;
+          const end = inputEl.selectionEnd;
+
+          if (start !== end) {
+              // If there is a selection, just delete it
+              inputEl.value = val.slice(0, start) + val.slice(end);
+              inputEl.selectionStart = inputEl.selectionEnd = start;
+          } else {
+              // Delete previous word logic
+              let before = val.slice(0, start);
+              const after = val.slice(start);
+
+              // Trim trailing spaces from 'before' to find end of previous word
+              const trimmed = before.trimEnd();
+              const lastSpace = trimmed.lastIndexOf(" ");
+
+              if (lastSpace === -1) {
+                  before = ""; // No spaces, delete everything
+              } else {
+                  // Keep the space after the previous word
+                  before = before.slice(0, lastSpace + 1);
+              }
+
+              inputEl.value = before + after;
+              inputEl.selectionStart = inputEl.selectionEnd = before.length;
+          }
+          render();
+      }
+    });
+
+    // always regain focus when the user starts typing (unless finished)
+    window.addEventListener("keydown", (e) => {
+      if (isFinished || historyModal.classList.contains('active')) return;
+      
+      if (e.ctrlKey || e.altKey || e.metaKey) return;
+      // ignore keys that are purely navigation
+      const navKeys = ["Shift","Tab","CapsLock","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"];
+      if (navKeys.includes(e.key)) return;
+      inputEl.focus();
+    }, true);
+
+    nextBtn.addEventListener("click", startRound);
+    resetBtn.addEventListener("click", () => {
+      inputEl.value = "";
+      resetState();
+      render();
+      inputEl.focus();
+    });
+    
+    // History Modal Listeners
+    historyBtn.addEventListener("click", () => {
+        historyModal.classList.add("active");
+    });
+    closeModal.addEventListener("click", () => {
+        historyModal.classList.remove("active");
+        inputEl.focus();
+    });
+    historyModal.addEventListener("click", (e) => {
+        if (e.target === historyModal) {
+            historyModal.classList.remove("active");
+            inputEl.focus();
+        }
+    });
+    clearHistoryBtn.addEventListener("click", resetHistory);
+
+    // Initial render of history UI
+    renderHistoryUI();
+    startRound();
+  </script>
+</body>
+</html>
